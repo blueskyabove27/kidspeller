@@ -82,8 +82,8 @@
   #delay { width:100%; border:2px solid #e2e8f2; background:#fff; border-radius:12px; height:54px; font-size:1.15rem; font-weight:760; color:var(--ink); padding:0 80px 0 15px; }
   .suffix { position:absolute; right:17px; top:16px; font-size:.88rem; color:var(--muted); pointer-events:none; }
   .range-wrap { display:flex; align-items:center; gap:12px; }
-  #speed,#answerSpeed { flex:1; accent-color:var(--blue); cursor:pointer; height:24px; min-width:0; }
-  #speedValue,#answerSpeedValue { font-weight:800; color:#1e5dcc; min-width:49px; text-align:right; font-variant-numeric:tabular-nums; }
+  #speed,#letterGap { flex:1; accent-color:var(--blue); cursor:pointer; height:24px; min-width:0; }
+  #speedValue,#letterGapValue { font-weight:800; color:#1e5dcc; min-width:49px; text-align:right; font-variant-numeric:tabular-nums; }
   .range-labels { display:flex; justify-content:space-between; color:var(--muted); font-size:.78rem; margin:6px 56px 0 1px; }
   .note { font-size:.78rem; line-height:1.55; color:#758399; padding-top:17px; margin-top:25px; border-top:1px solid var(--line); }
   .guide { margin:22px 2px 0; color:#64738a; font-size:.86rem; line-height:1.65; }
@@ -154,9 +154,9 @@
         <div class="range-labels"><span>0.50×</span><span>1.00×</span></div>
       </div>
       <div class="field">
-        <div class="label-row"><label for="answerSpeed">Spelling answer speed</label><span class="hint">Letter by letter</span></div>
-        <div class="range-wrap"><input id="answerSpeed" type="range" min="0.4" max="1.2" step="0.05" value="0.65"><output id="answerSpeedValue" for="answerSpeed">0.65×</output></div>
-        <div class="range-labels"><span>0.40×</span><span>1.20×</span></div>
+        <div class="label-row"><label for="letterGap">Pause between letters</label><span class="hint">Adjust the silence only</span></div>
+        <div class="range-wrap"><input id="letterGap" type="range" min="0.10" max="2.00" step="0.01" value="0.26"><output id="letterGapValue" for="letterGap">0.26 sec</output></div>
+        <div class="range-labels"><span>0.10 sec (short)</span><span>2.00 sec (long)</span></div>
       </div>
       <p class="note">Timed quizzes work offline with Chrome text-to-speech. Listen mode needs microphone permission and may need an internet connection for speech recognition. If recognition is unavailable, use the Done button.</p>
     </aside>
@@ -551,7 +551,7 @@ const dom = {
   timer:$('timer'), spelling:$('spelling'), headline:$('headline'),
   description:$('description'), progressWrap:$('progressWrap'),
   progress:$('progress'), status:$('statusLine'), delay:$('delay'),
-  speed:$('speed'), speedValue:$('speedValue'), answerSpeed:$('answerSpeed'), answerSpeedValue:$('answerSpeedValue'), mode:$('timeMode'), delayField:$('delayField'), listenInfo:$('listenInfo'), list:$('wordList'), listSummary:$('listSummary')
+  speed:$('speed'), speedValue:$('speedValue'), letterGap:$('letterGap'), letterGapValue:$('letterGapValue'), mode:$('timeMode'), delayField:$('delayField'), listenInfo:$('listenInfo'), list:$('wordList'), listSummary:$('listSummary')
 };
 const synthesis = 'speechSynthesis' in window ? window.speechSynthesis : null;
 let voice = null;
@@ -609,8 +609,7 @@ function getDelay() {
   return whole;
 }
 function getRate() { return Number(dom.speed.value); }
-function getAnswerRate() { return Number(dom.answerSpeed.value); }
-function getLetterGap() { return Math.round(260 * (0.65 / getAnswerRate())); }
+function getLetterGap() { return Math.round(Number(dom.letterGap.value) * 1000); }
 function updateButtons() {
   dom.play.disabled = status === 'running';
   dom.pause.disabled = status !== 'running';
@@ -719,7 +718,7 @@ function speak(text, token, slowLetters = false) {
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = voice ? voice.lang : 'en-US';
     if (voice) utterance.voice = voice;
-    utterance.rate = slowLetters ? getAnswerRate() : getRate();
+    utterance.rate = slowLetters ? Math.min(0.65, getRate()) : getRate();
     utterance.pitch = 1;
     utterance.volume = 1;
     let finished = false;
@@ -950,8 +949,8 @@ function updateTimingControls() {
   dom.listenInfo.style.display = listening ? 'block' : 'none';
 }
 dom.mode.addEventListener('change',updateTimingControls);
-dom.answerSpeed.addEventListener('input',() => {
-  dom.answerSpeedValue.textContent = getAnswerRate().toFixed(2) + '×';
+dom.letterGap.addEventListener('input',() => {
+  dom.letterGapValue.textContent = Number(dom.letterGap.value).toFixed(2) + ' sec';
 });
 dom.delay.addEventListener('change',getDelay);
 dom.speed.addEventListener('input',() => dom.speedValue.textContent = Number(dom.speed.value).toFixed(2) + '×');
