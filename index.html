@@ -546,12 +546,12 @@ const EXAMPLES = Object.fromEntries(Object.values(WORDS).flat());
 
 const $ = id => document.getElementById(id);
 const dom = {
-  play:$('play'), pause:$('pause'), playLabel:$('playLabel'),
+  play:$('play'), pause:$('pause'), done:$('done'), playLabel:$('playLabel'),
   badge:$('badge'), count:$('wordNumber'), art:$('art'), wave:$('wave'),
   timer:$('timer'), spelling:$('spelling'), headline:$('headline'),
   description:$('description'), progressWrap:$('progressWrap'),
   progress:$('progress'), status:$('statusLine'), delay:$('delay'),
-  speed:$('speed'), speedValue:$('speedValue'), list:$('wordList'), listSummary:$('listSummary')
+  speed:$('speed'), speedValue:$('speedValue'), answerSpeed:$('answerSpeed'), answerSpeedValue:$('answerSpeedValue'), mode:$('timeMode'), delayField:$('delayField'), listenInfo:$('listenInfo'), list:$('wordList'), listSummary:$('listSummary')
 };
 const synthesis = 'speechSynthesis' in window ? window.speechSynthesis : null;
 let voice = null;
@@ -566,6 +566,8 @@ let sleepTask = null;
 let resumeWaiters = [];
 let countdownTotal = 0;
 let speechUnavailableNotice = false;
+const SpeechRecognitionClass = window.SpeechRecognition || window.webkitSpeechRecognition || null;
+let listeningTask = null;
 
 function findVoice() {
   if (!synthesis) return;
@@ -607,10 +609,13 @@ function getDelay() {
   return whole;
 }
 function getRate() { return Number(dom.speed.value); }
+function getAnswerRate() { return Number(dom.answerSpeed.value); }
+function getLetterGap() { return Math.round(260 * (0.65 / getAnswerRate())); }
 function updateButtons() {
   dom.play.disabled = status === 'running';
   dom.pause.disabled = status !== 'running';
   dom.playLabel.textContent = status === 'paused' ? 'Resume' : status === 'running' ? 'Playing' : 'Play';
+  dom.done.disabled = status !== 'running' || stage !== 'listening';
   document.body.classList.toggle('is-paused',status === 'paused');
 }
 function renderStage(phase) {
@@ -626,6 +631,7 @@ function renderStage(phase) {
     gap:['A short pause','Listen for the sentence','Your word will be used in a sentence next.','listen'],
     sentence:['Hear the sentence','Listen to the sentence','The sentence includes your spelling word.','listen'],
     thinking:['Your turn!','Spell the word','Say it, write it, or spell it in your head.','think'],
+    listening:['Listening for “I’m done”','Spell the word','Say “I’m done” when finished, or press the Done button.','think'],
     spelling:['The answer','Here is the spelling','Listen as each letter is spoken.','answer'],
     hold:['The answer','Well done!','Take a look at the spelling. The next word is coming.','answer'],
     next:['Coming up','Next word...','Listen closely for the next spelling word.','listen'],
@@ -638,6 +644,8 @@ function renderStage(phase) {
   dom.description.textContent = desc;
   if (phase === 'idle' || phase === 'complete') { dom.art.style.display = 'grid'; dom.art.textContent = phase === 'complete' ? '✓' : '?'; }
   if (['word','gap','sentence','next'].includes(phase)) dom.wave.style.display = 'grid';
+  dom.done.hidden = phase !== 'listening';
+  dom.done.disabled = status !== 'running' || phase !== 'listening';
   if (phase === 'thinking') {
     dom.timer.style.display = 'block';
     dom.progressWrap.style.display = 'block';
@@ -711,7 +719,7 @@ function speak(text, token, slowLetters = false) {
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = voice ? voice.lang : 'en-US';
     if (voice) utterance.voice = voice;
-    utterance.rate = slowLetters ? Math.min(0.65,getRate()) : getRate();
+    utterance.rate = slowLetters ? getAnswerRate() : getRate();
     utterance.pitch = 1;
     utterance.volume = 1;
     let finished = false;
@@ -728,6 +736,101 @@ function speak(text, token, slowLetters = false) {
     catch (e) { complete(); }
   });
 }
+
+// Listen mode begins only after speech playback of the sentence finishes.
+// A new recognition session starts after silence; a fatal error leaves manual Done available.
+function isDonePhrase(transcript) {
+  const clean = transcript.toLowerCase().replace(/[’‘]/g, "'")
+    .replace(/[^a-z' ]/g, ' ').replace(/\s+/g,' ').trim();
+  return /(?:^|\s)(?:i'm|im|i am) done(?:$|\s)/.test(clean);
+}
+function waitForSpokenDone(token) {
+  if (token !== runId) return Promise.resolve(false);
+  return new Promise(resolve => {
+    const task = {
+      active:true, recognition:null, timer:null, generation:0,
+      microphoneFailed:!SpeechRecognitionClass,
+      message(message) {
+        if (this.active && status === 'running' && token === runId) dom.status.textContent = message;
+      },
+      stopRecognition() {
+        ++this.generation; // Prevent late onresult/onend from old sessions.
+        if (this.timer !== null) { clearTimeout(this.timer); this.timer = null; }
+        const r = this.recognition;
+        this.recognition = null;
+        if (r) {
+          r.onresult = null;
+          r.onerror = null;
+          r.onend = null;
+          try { r.abort(); } catch(e) { /* Already stopped. */ }
+        }
+      },
+      pause() { this.stopRecognition(); },
+      resume() {
+        if (!this.active || status !== 'running' || token !== runId) return;
+        if (this.microphoneFailed) {
+          this.message(SpeechRecognitionClass
+            ? 'Microphone recognition unavailable. Press “I’m done” to reveal the answer.'
+            : 'Speech recognition unsupported here. Press “I’m done” to reveal the answer.');
+          return;
+        }
+        if (this.recognition || this.timer !== null) return;
+        const generation = ++this.generation;
+        try {
+          const r = new SpeechRecognitionClass();
+          r.lang = 'en-US';
+          r.continuous = true;
+          r.interimResults = false;
+          r.maxAlternatives = 3;
+          this.recognition = r;
+          r.onresult = event => {
+            if (!this.active || status !== 'running' || token !== runId || generation !== this.generation) return;
+            for (const result of Array.from(event.results)) {
+              if (!result.isFinal) continue;
+              for (const alternative of Array.from(result)) {
+                if (isDonePhrase(alternative.transcript || '')) {
+                  this.finish(true);
+                  return;
+                }
+              }
+            }
+          };
+          r.onerror = event => {
+            if (!this.active || generation !== this.generation) return;
+            if (['not-allowed','service-not-allowed','audio-capture','network','language-not-supported'].includes(event.error)) {
+              this.microphoneFailed = true;
+              this.stopRecognition();
+              this.message('Microphone unavailable (' + event.error + '). Press “I’m done” instead.');
+            }
+          };
+          r.onend = () => {
+            if (!this.active || generation !== this.generation) return;
+            this.recognition = null;
+            if (status === 'running' && !this.microphoneFailed) {
+              this.timer = setTimeout(() => { this.timer = null; this.resume(); }, 500);
+            }
+          };
+          r.start();
+          this.message('Microphone active — say “I’m done”, or press the Done button.');
+        } catch(e) {
+          this.microphoneFailed = true;
+          this.stopRecognition();
+          this.message('Could not start speech recognition. Press “I’m done” instead.');
+        }
+      },
+      finish(ok) {
+        if (!this.active) return;
+        this.active = false;
+        this.stopRecognition();
+        if (listeningTask === this) listeningTask = null;
+        resolve(ok && token === runId);
+      }
+    };
+    listeningTask = task;
+    task.resume();
+  });
+}
+
 async function quizLoop(token) {
   while (token === runId) {
     if (!await waitForResume(token)) return;
@@ -755,9 +858,14 @@ async function quizLoop(token) {
     renderStage('sentence');
     if (!await speak(sentence,token)) return;
     if (!await waitForResume(token)) return;
-    countdownTotal = getDelay()*1000;
-    renderStage('thinking');
-    if (!await wait(countdownTotal,token,true)) return;
+    if (dom.mode.value === 'listen') {
+      renderStage('listening');
+      if (!await waitForSpokenDone(token)) return;
+    } else {
+      countdownTotal = getDelay()*1000;
+      renderStage('thinking');
+      if (!await wait(countdownTotal,token,true)) return;
+    }
     if (!await waitForResume(token)) return;
     dom.spelling.replaceChildren();
     renderStage('spelling');
@@ -765,7 +873,7 @@ async function quizLoop(token) {
       if (!await waitForResume(token)) return;
       addLetter(char);
       if (!await speak(char,token,true)) return;
-      if (!await wait(260,token)) return;
+      if (!await wait(getLetterGap(),token)) return;
     }
     if (!await waitForResume(token)) return;
     renderStage('hold');
@@ -803,11 +911,13 @@ function startOrResume() {
     for (const listener of listeners) listener();
     updateButtons();
     renderStage(stage);
+    if (listeningTask) listeningTask.resume();
   }
 }
 function pause() {
   if (status !== 'running') return;
   if (sleepTask) sleepTask.pause();
+  if (listeningTask) listeningTask.pause();
   if (synthesis) try { synthesis.pause(); } catch(e) { console.warn(e); }
   status = 'paused';
   updateButtons();
@@ -831,6 +941,18 @@ function settingsChanged() {
 dom.list.addEventListener('change',settingsChanged);
 dom.play.addEventListener('click',startOrResume);
 dom.pause.addEventListener('click',pause);
+dom.done.addEventListener('click', () => {
+  if (status === 'running' && listeningTask) listeningTask.finish(true);
+});
+function updateTimingControls() {
+  const listening = dom.mode.value === 'listen';
+  dom.delayField.hidden = listening;
+  dom.listenInfo.style.display = listening ? 'block' : 'none';
+}
+dom.mode.addEventListener('change',updateTimingControls);
+dom.answerSpeed.addEventListener('input',() => {
+  dom.answerSpeedValue.textContent = getAnswerRate().toFixed(2) + '×';
+});
 dom.delay.addEventListener('change',getDelay);
 dom.speed.addEventListener('input',() => dom.speedValue.textContent = Number(dom.speed.value).toFixed(2) + '×');
 for (const button of document.querySelectorAll('.age')) {
@@ -842,6 +964,7 @@ for (const button of document.querySelectorAll('.age')) {
 }
 // Update only the visual countdown; the countdown's authoritative time is the wait task.
 setInterval(renderCountdown,100);
+updateTimingControls();
 updateButtons();
 renderStage('idle');
 </script>
