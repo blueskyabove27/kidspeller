@@ -1,28 +1,40 @@
 # kidspeller
 
-A standalone spelling quiz for children ages 8–11. Everything runs in one `index.html` file using Chrome's built-in text-to-speech API; no installation, server, account, internet connection, or external libraries are needed.
+A standalone spoken spelling quiz for children ages 8–11. The entire app, including its vocabulary, runs from a single `index.html` file in Chrome—no build step, server, or external JavaScript libraries.
 
 ## Run
 
-1. Open `index.html` in Google Chrome (double-click a downloaded copy or use File → Open File).
-2. Choose a word level: age **8**, **9**, **10**, or **11**.
-3. Choose a numbered **word list (1–20)**. Each age has 20 fixed lists of exactly 40 words, or 800 distinct words per age.
-4. Set the spelling delay (default **20 seconds**, adjustable from 1 to 180 seconds).
-5. Set the voice speed (**0.50×–1.00×**) and press **Play**. Use **Pause**/**Resume** to freeze and continue the quiz.
+1. Download `index.html` and open it in Google Chrome, or open it from the repository.
+2. Choose a word level: **8**, **9**, **10**, or **11** years old.
+3. Select a **word list from 1–30**. Every age has **30 fixed lists of 30 words** (900 unique words per age, 3,600 total).
+4. Set **Answer timing**:
+   - **Countdown (seconds)**: reveal the answer after a configurable delay (20 seconds by default, 1–180 seconds).
+   - **Listen for “I’m done”**: listen for the learner to say **“I'm done”** after the example sentence. No countdown is used. Alternatively, press the **I'm done — reveal spelling** button.
+5. Adjust **Voice speed** (0.50×–1.00×) for each word and example sentence.
+6. Adjust **Pause between letters** (0.10–2.00 seconds, default 0.26 seconds) to control **only the silent gap** between spoken letters. Letter pronunciation and speech rate stay unchanged by this control.
+7. Press **Play** to begin, **Pause** to stop, and **Resume** to continue.
 
-## Spoken quiz sequence
+## Question sequence
 
-For each word, the screen shows **List N · Word X of 40** and Chrome announces **“Word number 1 is…”** for the first word, or **“Next word, number 5 is…”** for later words.
+For each word, the screen shows **List N · Word X of 30**. Chrome announces **“Word number 1 is…”** for the first word, or **“Next word, number 5 is…”** for later words.
 
-1. Say the question number and the spelling word without displaying the answer.
+1. Say the question number and spelling word while keeping the spelling hidden.
 2. Wait **1.6 seconds**, then say a short sentence containing the word.
-3. Wait the configured thinking period.
-4. Slowly speak the letters, revealing each letter on screen.
-5. Show the completed spelling for **3 seconds**, clear it, and introduce the next numbered word.
-6. After word **40**, display **List complete** and stop. Press Play to restart that list.
+3. Wait for either the configured countdown or **“I'm done”** (Listen mode).
+4. Speak and reveal the word **letter by letter** at the original spoken-letter rate, leaving the selected pause between letters.
+5. Hold the complete spelling on screen for **3 seconds**, clear it, then advance.
+6. After **word 30**, show **List complete** and stop. Play restarts the current list.
 
-Words are asked in **fixed list order**, so the spoken number corresponds to the selected list's actual word number. Changing age or list while a quiz is in progress takes effect after the current word; numbering restarts at 1. The age levels are approximate vocabulary difficulty groupings. The English voice used is the one available in your Chrome installation.
+Words stay in a fixed order within each list, so the spoken word number is stable. Changing the age or list during playback takes effect after the current question and resets numbering to 1. Mode changes during the current question take effect when the following question begins.
 
-## Word data
+## Chrome audio and microphone notes
 
-The lists include the original hand-authored spelling words and are expanded with common English vocabulary selected from the public [Google 10,000 English words frequency list](https://github.com/first20hours/google-10000-english). Commonly unsuitable terms are filtered out. All list data and example-sentence fallbacks are bundled directly into the HTML file for offline use.
+- **Timed mode** can run offline if Chrome has an available local text-to-speech voice.
+- **Listen mode** uses Chrome's `SpeechRecognition` or `webkitSpeechRecognition` API. Grant microphone permission when requested. Depending on Chrome and your platform, recognition **may require internet access**.
+- The microphone starts listening **only after the example sentence finishes**, and stops on **Pause**, when the answer is revealed, or when the recognition session is stopped.
+- If speech recognition is unsupported, blocked, or unavailable, the quiz remains in Listen mode and the **I'm done — reveal spelling** button lets you proceed without waiting for a timer.
+- Use Chrome on a supported platform and allow microphone permission. System speech voices determine exact audio quality and pronunciation.
+
+## Vocabulary
+
+All lists are embedded in `index.html`. The original example sentences are retained for the original hand-written words; additional words receive a short fallback sentence that contains the word. The banks were expanded with a filtered selection from the public [Google 10,000 English words frequency list](https://github.com/first20hours/google-10000-english). Age levels are approximate vocabulary difficulty categories.
