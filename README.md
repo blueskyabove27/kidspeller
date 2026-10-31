@@ -11,7 +11,7 @@ A standalone spoken spelling quiz for children ages 8–11. The entire app, incl
    - **Countdown (seconds)**: reveal the answer after a configurable delay (20 seconds by default, 1–180 seconds).
    - **Listen for “I’m done”**: listen for the learner to say **“I'm done”** after the example sentence. No countdown is used. Alternatively, press the **I'm done — reveal spelling** button.
 5. Adjust **Voice speed** (0.50×–1.00×) for each word and example sentence.
-6. Adjust **Spelling answer speed** (0.40×–1.20×) for the spoken letters. This slider separately controls the rate of letter speech and the gaps between letters.
+6. Adjust **Pause between letters** (0.10–2.00 seconds, default 0.26 seconds) to control **only the silent gap** between spoken letters. Letter pronunciation and speech rate stay unchanged by this control.
 7. Press **Play** to begin, **Pause** to stop, and **Resume** to continue.
 
 ## Question sequence
@@ -21,7 +21,7 @@ For each word, the screen shows **List N · Word X of 30**. Chrome announces **�
 1. Say the question number and spelling word while keeping the spelling hidden.
 2. Wait **1.6 seconds**, then say a short sentence containing the word.
 3. Wait for either the configured countdown or **“I'm done”** (Listen mode).
-4. Slowly speak and reveal the word, **letter by letter**, at the selected spelling answer speed.
+4. Speak and reveal the word **letter by letter** at the original spoken-letter rate, leaving the selected pause between letters.
 5. Hold the complete spelling on screen for **3 seconds**, clear it, then advance.
 6. After **word 30**, show **List complete** and stop. Play restarts the current list.
 
